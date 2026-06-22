@@ -775,7 +775,7 @@ class JiraOverlay:
                             activebackground="#4a5568", activeforeground="white",
                             font=("Segoe UI", 9))
         self.menu.add_command(label="↻  Refresh now",    command=self._fetch)
-        self.menu.add_command(label="⚙  Settings…",      command=lambda: self.root.after(50, self._open_settings))
+        self.menu.add_command(label="⚙  Settings…",      command=lambda: (self.menu.unpost(), self.root.after(10, self._open_settings)))
         self.menu.add_separator()
         snooze = tk.Menu(self.menu, tearoff=0, bg="#2d3748", fg="#e2e8f0",
                          activebackground="#4a5568", activeforeground="white",
@@ -892,10 +892,7 @@ class JiraOverlay:
     def _show_menu(self, e):
         if self._settings_open:
             return
-        try:
-            self.menu.tk_popup(e.x_root, e.y_root)
-        finally:
-            self.menu.grab_release()
+        self.menu.tk_popup(e.x_root, e.y_root)
 
     # ── Corner snapping ───────────────────────────────────────────────────────
 
