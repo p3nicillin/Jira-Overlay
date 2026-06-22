@@ -1290,8 +1290,7 @@ class JiraOverlay:
 
     def _snooze(self, minutes: int) -> None:
         self._snooze_until = datetime.now() + timedelta(minutes=minutes)
-        if self._visible:
-            self._do_hide()
+        self._update_ui()   # immediate: amber button, status text, hide if needed
 
     def _cancel_snooze(self) -> None:
         self._snooze_until = None
