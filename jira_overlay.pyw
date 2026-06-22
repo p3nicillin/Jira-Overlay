@@ -601,12 +601,9 @@ class JiraOverlay:
         sd_url    = self._jira_url(sd_path)
 
         menu = pystray.Menu(
-            pystray.MenuItem("Show / Hide",              self._tray_toggle, default=True),
-            pystray.MenuItem(f"Open {desk_name} in Jira", lambda: webbrowser.open(sd_url)),
-            pystray.MenuItem("Refresh now",    lambda: self.root.after(0, self._fetch)),
-            pystray.MenuItem("Settings…",      lambda: self.root.after(0, self._toggle_settings)),
+            pystray.MenuItem("Show / Hide", self._tray_toggle, default=True),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit",           lambda: self.root.after(0, self.root.destroy)),
+            pystray.MenuItem("Quit",        lambda: self.root.after(0, self.root.destroy)),
         )
         self._tray = pystray.Icon("JiraOverlay", _make_tray_image(0, False),
                                   "Jira Overlay", menu)
