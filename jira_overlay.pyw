@@ -33,7 +33,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 import tkinter as tk
 from tkinter import messagebox
-from idlelib.tooltip import Hovertip
 
 # ---------------------------------------------------------------------------
 # Dependency bootstrap — must run before any third-party import
@@ -288,6 +287,64 @@ def _corner_positions(sw: int, sh: int, w: int, h: int) -> dict[str, tuple[int, 
         "bottom-left":  (10,           sh - h - 60),
         "bottom-right": (sw - w - 20,  sh - h - 60),
     }
+
+
+# ---------------------------------------------------------------------------
+# Dark-themed tooltip (always appears above the target widget)
+# ---------------------------------------------------------------------------
+
+class _Tooltip:
+    """Styled tooltip that appears above its widget after a short hover delay."""
+
+    def __init__(self, widget: tk.Widget, text: str, delay: int = 600) -> None:
+        self._widget = widget
+        self._text   = text
+        self._delay  = delay
+        self._job:  Optional[str]         = None
+        self._tip:  Optional[tk.Toplevel] = None
+        widget.bind("<Enter>",        self._schedule, add=True)
+        widget.bind("<Leave>",        self._cancel,   add=True)
+        widget.bind("<ButtonPress-1>", self._cancel,  add=True)
+
+    def _schedule(self, _e=None) -> None:
+        self._cancel()
+        self._job = self._widget.after(self._delay, self._show)
+
+    def _cancel(self, _e=None) -> None:
+        if self._job:
+            self._widget.after_cancel(self._job)
+            self._job = None
+        if self._tip:
+            self._tip.destroy()
+            self._tip = None
+
+    def _show(self) -> None:
+        if self._tip:
+            return
+        tip = tk.Toplevel(self._widget)
+        tip.overrideredirect(True)
+        tip.attributes("-topmost", True)
+        tip.configure(bg=_C["border"])          # 1-px accent-colour border
+
+        tk.Label(tip, text=self._text,
+                 font=("Segoe UI", 8),
+                 fg=_C["fg_bright"], bg=_C["input"],
+                 padx=8, pady=5).pack(padx=1, pady=1)
+
+        tip.update_idletasks()
+        tw = tip.winfo_reqwidth()
+        th = tip.winfo_reqheight()
+        wx = self._widget.winfo_rootx()
+        wy = self._widget.winfo_rooty()
+        ww = self._widget.winfo_width()
+        sw = tip.winfo_screenwidth()
+
+        # Centre horizontally over the widget; always place ABOVE it
+        x = max(4, min(wx + (ww - tw) // 2, sw - tw - 4))
+        y = max(4, wy - th - 6)
+
+        tip.geometry(f"+{x}+{y}")
+        self._tip = tip
 
 
 # ---------------------------------------------------------------------------
@@ -644,14 +701,14 @@ class JiraOverlay:
         self.lbl_title.bind("<Enter>", lambda _e: self.lbl_title.config(fg="#3399ff"))
         self.lbl_title.bind("<Leave>", lambda _e: self.lbl_title.config(fg=_C["accent"]))
         self.lbl_title.bind("<ButtonRelease-1>", lambda _e: self._open_service_desk())
-        Hovertip(self.lbl_title, "Open service desk in Jira", hover_delay=600)
+        _Tooltip(self.lbl_title, "Open service desk in Jira")
         self.btn_gear = tk.Label(hdr, text="⚙", font=("Segoe UI", 10),
                                  fg=_C["fg_dim"], bg=BG, cursor="hand2")
         self.btn_gear.pack(side="right")
         self.btn_gear.bind("<ButtonRelease-1>", lambda _e: self._toggle_settings())
         self.btn_gear.bind("<Enter>", lambda _e: self.btn_gear.config(fg=_C["fg"]))
         self.btn_gear.bind("<Leave>", lambda _e: self.btn_gear.config(fg=_C["fg_dim"]))
-        Hovertip(self.btn_gear, "Settings", hover_delay=600)
+        _Tooltip(self.btn_gear, "Settings")
 
         tk.Frame(self.frame, bg=_C["divider"], height=1).pack(fill="x", pady=(4, 4))
 
@@ -685,7 +742,7 @@ class JiraOverlay:
             w.bind("<ButtonRelease-1>", lambda _e: self._open_completed_today())
             w.bind("<Enter>", lambda _e: _done_hover("#1e3a2e"))
             w.bind("<Leave>", lambda _e: _done_hover(BG))
-        Hovertip(self.lbl_done, "Open completed tickets in Jira", hover_delay=600)
+        _Tooltip(self.lbl_done, "Open completed tickets in Jira")
 
         tk.Frame(self.main_panel, bg=_C["divider"], height=1).pack(fill="x", pady=(4, 2))
 
@@ -732,7 +789,7 @@ class JiraOverlay:
         btn.bind("<Leave>",  lambda _e: btn.config(fg=color))
         btn.bind("<ButtonPress-1>",   lambda e: None)
         if tip:
-            Hovertip(btn, tip, hover_delay=600)
+            _Tooltip(btn, tip)
         return btn
 
     def _bind_drag(self, w: tk.Widget) -> None:
@@ -775,7 +832,7 @@ class JiraOverlay:
 
         tip_text = ("Click to open · hover for ticket list" if is_new
                     else "Click to open queue in Jira")
-        Hovertip(row, tip_text, hover_delay=600)
+        _Tooltip(row, tip_text)
 
         if is_new:
             for w in (row, lbl_name, lbl_count, dot):
