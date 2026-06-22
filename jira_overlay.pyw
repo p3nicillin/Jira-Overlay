@@ -45,7 +45,6 @@ import os
 import struct
 import subprocess
 import sys
-import math
 import threading
 import time
 import webbrowser
@@ -1195,82 +1194,76 @@ class JiraOverlay:
 
     # ── Inline settings ───────────────────────────────────────────────────────
 
-    # ── Settings animation constants ─────────────────────────────────────────
-    _SETTINGS_W    = 420   # width in settings mode
-    _ANIM_STEPS    = 20    # frames
-    _ANIM_MS       = 12    # ms per frame  (~240 ms total)
+    _SETTINGS_W = 420   # overlay width in settings mode
 
     def _toggle_settings(self):
         if self._in_settings:
-            self._settings_anim(closing=True)
+            self._close_settings()
             return
         self._in_settings = True
-        # Show overlay if hidden (transparent while we measure)
         if not self._visible:
             self._visible = True
             self.root.attributes("-alpha", self.config.get("alpha", 0.93))
             self.root.deiconify()
             self.root.update_idletasks()
 
+        # Save queue geometry before expanding
+        self._queue_geom = (
+            self.root.winfo_width(), self.root.winfo_height(),
+            self.root.winfo_x(),    self.root.winfo_y()
+        )
         self.btn_gear.config(text="✕")
         self.main_panel.pack_forget()
         self._build_settings_panel()
         self.settings_panel.pack(fill="both", expand=True)
-        self.root.update_idletasks()
-        self._settings_anim(closing=False)
 
-    def _settings_anim(self, closing: bool):
-        """Start the open/close size animation."""
+        # Fade out → resize → fade in  (resize is invisible so no jitter)
+        alpha = float(self.root.attributes("-alpha"))
+        self._sfade(alpha, 0.0, on_done=self._apply_settings_geom)
+
+    def _apply_settings_geom(self):
+        cw, ch, cx, cy = self._queue_geom
+        tw  = self._SETTINGS_W
+        tx  = self._sw - tw - 20
+        bot = cy + ch
+        ty  = max(20, bot - int(self._sh * 0.9))
+        th  = bot - ty
+        self.root.geometry(f"{tw}x{th}+{tx}+{ty}")
+        self._sfade(0.0, self.config.get("alpha", 0.93))
+
+    def _close_settings(self):
+        alpha = float(self.root.attributes("-alpha"))
+        self._sfade(alpha, 0.0, on_done=self._apply_queue_geom)
+
+    def _apply_queue_geom(self):
+        self._in_settings = False
+        self.btn_gear.config(text="⚙")
+        self.settings_panel.pack_forget()
+        self.main_panel.pack(fill="both", expand=True)
+        if self._queue_geom:
+            qw, qh, qx, qy = self._queue_geom
+            self.root.geometry(f"{qw}x{qh}+{qx}+{qy}")
+        self._sfade(0.0, self.config.get("alpha", 0.93))
+
+    def _sfade(self, current: float, target: float, on_done=None):
+        """Settings-specific alpha fade — independent of the overlay _fading flag."""
         if self._anim_job:
             self.root.after_cancel(self._anim_job)
             self._anim_job = None
+        step = (target - current) / 10     # 10 increments
+        self._sfade_step(current, target, step, on_done)
 
-        self.root.update_idletasks()
-        cw = self.root.winfo_width()
-        ch = self.root.winfo_height()
-        cx = self.root.winfo_x()
-        cy = self.root.winfo_y()
-
-        if not closing:
-            # Save queue geometry so we can restore it exactly
-            self._queue_geom = (cw, ch, cx, cy)
-            # Target: wide, tall — bottom-right corner stays fixed
-            tw  = self._SETTINGS_W
-            tx  = self._sw - tw - 20
-            bot = cy + ch                   # fixed bottom edge
-            ty  = max(20, bot - int(self._sh * 0.92))
-            th  = bot - ty
-            start, end = (cw, ch, cx, cy), (tw, th, tx, ty)
-        else:
-            # Animate back to saved queue dimensions
-            qw, qh, qx, qy = self._queue_geom or (cw, ch, cx, cy)
-            start, end = (cw, ch, cx, cy), (qw, qh, qx, qy)
-
-        self._run_anim(start, end, step=0, closing=closing)
-
-    def _run_anim(self, start, end, step: int, closing: bool):
-        t    = step / self._ANIM_STEPS
-        ease = (1 - math.cos(math.pi * t)) / 2
-        sw, sh, sx, sy = start
-        ew, eh, ex, ey = end
-        w = int(sw + (ew - sw) * ease)
-        h = int(sh + (eh - sh) * ease)
-        x = int(sx + (ex - sx) * ease)
-        y = int(sy + (ey - sy) * ease)
-        self.root.geometry(f"{w}x{h}+{x}+{y}")
-
-        if step < self._ANIM_STEPS:
-            self._anim_job = self.root.after(
-                self._ANIM_MS,
-                lambda: self._run_anim(start, end, step + 1, closing))
-        else:
+    def _sfade_step(self, current: float, target: float, step: float, on_done):
+        nxt  = current + step
+        done = (step > 0 and nxt >= target) or (step < 0 and nxt <= target)
+        self.root.attributes("-alpha", max(0.0, min(1.0, target if done else nxt)))
+        if done:
             self._anim_job = None
-            if closing:
-                self._in_settings = False
-                self.btn_gear.config(text="⚙")
-                self.settings_panel.pack_forget()
-                self.main_panel.pack(fill="both", expand=True)
-                self.root.after(10, self._resize)
+            if on_done:
+                on_done()
+        else:
+            self._anim_job = self.root.after(
+                16, lambda: self._sfade_step(nxt, target, step, on_done))
 
     def _build_settings_panel(self):
         """Destroy and rebuild the settings panel content from current config."""
@@ -1453,10 +1446,10 @@ class JiraOverlay:
             self._settings_changed = True
         else:
             self._fetch()
-        self._settings_anim(closing=True)
+        self._close_settings()
 
     def _cancel_settings(self):
-        self._settings_anim(closing=True)
+        self._close_settings()
 
     def _reconfigure(self):
         if messagebox.askyesno("Reconfigure", "Clear saved credentials and restart setup?",
