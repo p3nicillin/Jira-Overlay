@@ -830,14 +830,12 @@ class JiraOverlay:
             w.bind("<B1-Motion>",       self._drag_move)
             w.bind("<ButtonRelease-1>", lambda e, u=url: self._row_click(e, u))
 
-        tip_text = ("Click to open · hover for ticket list" if is_new
-                    else "Click to open queue in Jira")
-        _Tooltip(row, tip_text)
-
         if is_new:
             for w in (row, lbl_name, lbl_count, dot):
                 w.bind("<Enter>", self._tooltip_show)
                 w.bind("<Leave>", self._tooltip_hide)
+        else:
+            _Tooltip(row, "Click to open queue in Jira")
 
         return {"row": row, "lbl_name": lbl_name,
                 "lbl_count": lbl_count, "dot": dot,
