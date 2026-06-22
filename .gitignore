@@ -1,0 +1,13 @@
+# Jira credentials — never commit real config
+jira_config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code
+.vscode/
+
+# Screenshots / debug artefacts
+*.png
