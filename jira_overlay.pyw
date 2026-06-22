@@ -1219,19 +1219,9 @@ class JiraOverlay:
         for w in self.settings_panel.winfo_children():
             w.destroy()
 
-        cfg          = self.config
-        queue_names  = self._all_queue_names or [q["name"] for q in self.queues]
-        BG, FG, SEL  = "#16213e", "#a0aec0", "#2d3748"
-
-        def section(text):
-            tk.Label(self.settings_panel, text=text.upper(), font=("Segoe UI", 7, "bold"),
-                     fg="#4a5568", bg=BG).pack(anchor="w", padx=12, pady=(10, 0))
-            tk.Frame(self.settings_panel, bg="#2d3748", height=1).pack(fill="x", padx=12, pady=(2, 2))
-
-        def check(parent, text, var):
-            tk.Checkbutton(parent, text=text, variable=var, fg=FG, bg=BG,
-                           selectcolor=SEL, activeforeground="#e2e8f0", activebackground=BG,
-                           font=("Segoe UI", 9)).pack(anchor="w", padx=16, pady=1)
+        cfg         = self.config
+        queue_names = self._all_queue_names or [q["name"] for q in self.queues]
+        BG, FG, SEL = "#16213e", "#a0aec0", "#2d3748"
 
         # ── Scrollable body ──────────────────────────────────────────────────
         wrap   = tk.Frame(self.settings_panel, bg=BG)
@@ -1248,6 +1238,17 @@ class JiraOverlay:
         body.bind("<MouseWheel>", _scroll)
         sb.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
+
+        # ── Helpers — defined AFTER body so they pack into body, not settings_panel
+        def section(text):
+            tk.Label(body, text=text.upper(), font=("Segoe UI", 7, "bold"),
+                     fg="#4a5568", bg=BG).pack(anchor="w", padx=12, pady=(10, 0))
+            tk.Frame(body, bg="#2d3748", height=1).pack(fill="x", padx=12, pady=(2, 2))
+
+        def check(parent, text, var):
+            tk.Checkbutton(parent, text=text, variable=var, fg=FG, bg=BG,
+                           selectcolor=SEL, activeforeground="#e2e8f0", activebackground=BG,
+                           font=("Segoe UI", 9)).pack(anchor="w", padx=16, pady=1)
 
         # Refresh interval
         section("Refresh interval")
