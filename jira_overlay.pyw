@@ -346,238 +346,6 @@ class PickDeskWindow:
 
 
 # ---------------------------------------------------------------------------
-# Settings dialog
-# ---------------------------------------------------------------------------
-
-class SettingsDialog:
-    def __init__(self, parent, config, queue_names):
-        self.config      = config
-        self.queue_names = queue_names
-        self.result      = None
-
-        sw = parent.winfo_screenwidth()
-        sh = parent.winfo_screenheight()
-
-        self.win = tk.Toplevel(parent)
-        self.win.title("Settings")
-        self.win.configure(bg="#1a1a2e")
-        self.win.resizable(False, True)
-        self.win.attributes("-topmost", True)
-        self.win.lift()
-
-        # ── Fixed header ─────────────────────────────────────────────────────
-        tk.Label(self.win, text="Settings", font=("Segoe UI", 12, "bold"),
-                 fg="#e2e8f0", bg="#1a1a2e").pack(pady=(16, 4))
-
-        # ── Scrollable body ──────────────────────────────────────────────────
-        wrap = tk.Frame(self.win, bg="#1a1a2e")
-        wrap.pack(fill="both", expand=True)
-
-        canvas = tk.Canvas(wrap, bg="#1a1a2e", highlightthickness=0, width=420)
-        sb     = tk.Scrollbar(wrap, orient="vertical", command=canvas.yview)
-        self.body = tk.Frame(canvas, bg="#1a1a2e")
-        self.body.bind("<Configure>",
-                       lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self.body, anchor="nw", width=420)
-        canvas.configure(yscrollcommand=sb.set)
-
-        def _scroll(e): canvas.yview_scroll(-1 * (e.delta // 120), "units")
-        canvas.bind("<MouseWheel>", _scroll)
-        self.body.bind("<MouseWheel>", _scroll)
-
-        sb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        # ── Fixed footer buttons ─────────────────────────────────────────────
-        bf = tk.Frame(self.win, bg="#1a1a2e")
-        bf.pack(fill="x", padx=20, pady=(6, 14), side="bottom")
-        tk.Button(bf, text="Cancel", command=self.win.destroy,
-                  bg="#2d3748", fg="#a0aec0", font=("Segoe UI", 9),
-                  relief="flat", padx=12, pady=6, cursor="hand2"
-                  ).pack(side="right", padx=(4, 0))
-        tk.Button(bf, text="Save", command=self._save,
-                  bg="#0052cc", fg="white", font=("Segoe UI", 9, "bold"),
-                  relief="flat", padx=14, pady=6, cursor="hand2"
-                  ).pack(side="right")
-
-        self._build()
-
-        # Size: fit content capped at 82 % of screen height; canvas fills the gap
-        self.win.update_idletasks()
-        body_h = self.body.winfo_reqheight()
-        win_h  = min(body_h + 110, int(sh * 0.82))
-        self.win.geometry(f"460x{win_h}+{sw//2-230}+{sh//2-win_h//2}")
-        self.win.minsize(460, 300)
-
-        self.win.focus_force()
-        self.win.wait_window(self.win)
-
-    def _section(self, text):
-        tk.Label(self.body, text=text.upper(), font=("Segoe UI", 7, "bold"),
-                 fg="#4a5568", bg="#1a1a2e").pack(anchor="w", padx=20, pady=(12, 0))
-        tk.Frame(self.body, bg="#2d3748", height=1).pack(fill="x", padx=20, pady=(2, 4))
-
-    def _check(self, text, var):
-        tk.Checkbutton(self.body, text=text, variable=var,
-                       fg="#a0aec0", bg="#1a1a2e", selectcolor="#2d3748",
-                       activeforeground="#e2e8f0", activebackground="#1a1a2e",
-                       font=("Segoe UI", 9)).pack(anchor="w", padx=24, pady=1)
-
-    def _build(self):
-        # Refresh interval
-        self._section("Refresh interval")
-        rf = tk.Frame(self.body, bg="#1a1a2e")
-        rf.pack(fill="x", padx=24)
-        self.refresh_var = tk.IntVar(value=self.config.get("refreshSeconds", 30))
-        for secs, label in [(15,"15 s"),(30,"30 s"),(60,"1 min"),(120,"2 min"),(300,"5 min")]:
-            tk.Radiobutton(rf, text=label, variable=self.refresh_var, value=secs,
-                           fg="#a0aec0", bg="#1a1a2e", selectcolor="#2d3748",
-                           activeforeground="#e2e8f0", activebackground="#1a1a2e",
-                           font=("Segoe UI", 9)).pack(side="left", padx=(0, 10))
-
-        # Alerts
-        self._section("Alerts")
-        self.notif_var = tk.BooleanVar(value=self.config.get("notificationsEnabled", True))
-        self.sound_var = tk.BooleanVar(value=self.config.get("soundEnabled", True))
-        self._check("Desktop notification when ticket arrives", self.notif_var)
-        self._check("Sound alert", self.sound_var)
-
-        # Appearance
-        self._section("Appearance")
-        af = tk.Frame(self.body, bg="#1a1a2e")
-        af.pack(fill="x", padx=24, pady=(0, 4))
-        tk.Label(af, text="Transparency", font=("Segoe UI", 9),
-                 fg="#a0aec0", bg="#1a1a2e").grid(row=0, column=0, sticky="w")
-        self.alpha_var = tk.DoubleVar(value=self.config.get("alpha", 0.93))
-        tk.Scale(af, from_=0.3, to=1.0, resolution=0.05, orient="horizontal",
-                 variable=self.alpha_var, length=160,
-                 bg="#1a1a2e", fg="#a0aec0", troughcolor="#2d3748",
-                 highlightthickness=0, sliderrelief="flat"
-                 ).grid(row=0, column=1, padx=(8, 0))
-        tk.Label(af, text="Width", font=("Segoe UI", 9),
-                 fg="#a0aec0", bg="#1a1a2e").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.width_var = tk.IntVar(value=self.config.get("overlayWidth", 260))
-        tk.Scale(af, from_=200, to=420, resolution=10, orient="horizontal",
-                 variable=self.width_var, length=160,
-                 bg="#1a1a2e", fg="#a0aec0", troughcolor="#2d3748",
-                 highlightthickness=0, sliderrelief="flat"
-                 ).grid(row=1, column=1, padx=(8, 0), pady=(6, 0))
-        self.always_var = tk.BooleanVar(value=self.config.get("alwaysVisible", False))
-        self._check("Always show (dashboard mode)", self.always_var)
-
-        # Queue filtering
-        self._section("Queue filtering")
-        kf = tk.Frame(self.body, bg="#1a1a2e")
-        kf.pack(fill="x", padx=24, pady=(0, 4))
-
-        tk.Label(kf, text="Hide queues whose name contains (comma-separated):",
-                 font=("Segoe UI", 8), fg="#a0aec0", bg="#1a1a2e"
-                 ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
-        self.skip_kw_var = tk.StringVar(
-            value=", ".join(self.config.get("skipKeywords", [])))
-        tk.Entry(kf, textvariable=self.skip_kw_var, width=36,
-                 bg="#2d3748", fg="#e2e8f0", insertbackground="white",
-                 relief="flat", font=("Segoe UI", 9)
-                 ).grid(row=1, column=0, columnspan=2, sticky="ew", ipady=3)
-
-        tk.Label(kf, text="Hide queues with more than N tickets (0 = no limit):",
-                 font=("Segoe UI", 8), fg="#a0aec0", bg="#1a1a2e"
-                 ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 2))
-        self.max_queue_var = tk.IntVar(value=self.config.get("maxQueueSize", 0))
-        tk.Spinbox(kf, from_=0, to=999999, increment=1000, width=10,
-                   textvariable=self.max_queue_var,
-                   bg="#2d3748", fg="#e2e8f0", insertbackground="white",
-                   relief="flat", font=("Segoe UI", 9), buttonbackground="#2d3748"
-                   ).grid(row=3, column=0, sticky="w", ipady=3)
-        tk.Label(kf, text="  (e.g. 5000 hides huge archive queues)",
-                 font=("Segoe UI", 7), fg="#4a5568", bg="#1a1a2e"
-                 ).grid(row=3, column=1, sticky="w")
-
-        # Queues to show
-        if self.queue_names:
-            self._section("Queues to show")
-            hidden = set(self.config.get("hiddenQueues", []))
-            self.queue_vars = {n: tk.BooleanVar(value=n not in hidden) for n in self.queue_names}
-            for name, var in self.queue_vars.items():
-                self._check(name, var)
-        else:
-            self.queue_vars = {}
-
-        # Tray badge
-        self._section("Tray icon badge shows")
-        self.tray_badge_var = tk.StringVar(value=self.config.get("trayBadgeQueue", ""))
-        for name in self.queue_names:
-            tk.Radiobutton(self.body, text=name, variable=self.tray_badge_var, value=name,
-                           fg="#a0aec0", bg="#1a1a2e", selectcolor="#2d3748",
-                           activeforeground="#e2e8f0", activebackground="#1a1a2e",
-                           font=("Segoe UI", 9)).pack(anchor="w", padx=24)
-
-        # Alert queues (multi-select)
-        self._section("Alert queues (trigger overlay + notifications)")
-        current_alerts = set(self.config.get("alertQueues",
-                             [self.config.get("alertQueue", "")] if self.config.get("alertQueue") else []))
-        self.alert_queue_vars = {}
-        for name in self.queue_names:
-            var = tk.BooleanVar(value=name in current_alerts)
-            self.alert_queue_vars[name] = var
-            self._check(name, var)
-
-        # SLA field
-        self._section("SLA field name (for compliance %)")
-        sf = tk.Frame(self.body, bg="#1a1a2e")
-        sf.pack(fill="x", padx=24, pady=(0, 8))
-        tk.Label(sf, text="Field:", font=("Segoe UI", 9),
-                 fg="#a0aec0", bg="#1a1a2e").pack(side="left")
-        self.sla_field_var = tk.StringVar(value=self.config.get("slaField", "Time to resolution"))
-        tk.Entry(sf, textvariable=self.sla_field_var, width=28,
-                 bg="#2d3748", fg="#e2e8f0", insertbackground="white",
-                 relief="flat", font=("Segoe UI", 9)
-                 ).pack(side="left", padx=(8, 0), ipady=3)
-
-        # Completed today filter
-        self._section("Completed today — extra JQL filter (optional)")
-        tk.Label(self.body,
-                 text='e.g.  assignee is not EMPTY  or  labels = "MyTeam"',
-                 font=("Segoe UI", 7), fg="#4a5568", bg="#1a1a2e"
-                 ).pack(anchor="w", padx=24)
-        cf = tk.Frame(self.body, bg="#1a1a2e")
-        cf.pack(fill="x", padx=24, pady=(2, 8))
-        self.completed_filter_var = tk.StringVar(
-            value=self.config.get("completedTodayFilter", ""))
-        tk.Entry(cf, textvariable=self.completed_filter_var, width=36,
-                 bg="#2d3748", fg="#e2e8f0", insertbackground="white",
-                 relief="flat", font=("Segoe UI", 9)
-                 ).pack(fill="x", ipady=3)
-
-        # System
-        self._section("System")
-        self.startup_var = tk.BooleanVar(value=startup_enabled())
-        self._check("Run on Windows startup", self.startup_var)
-        tk.Frame(self.body, bg="#1a1a2e", height=8).pack()  # bottom padding
-
-    def _save(self):
-        set_startup(self.startup_var.get())
-        hidden = [n for n, v in self.queue_vars.items() if not v.get()]
-        self.result = {
-            "refreshSeconds":       self.refresh_var.get(),
-            "notificationsEnabled": self.notif_var.get(),
-            "soundEnabled":         self.sound_var.get(),
-            "hiddenQueues":         hidden,
-            "trayBadgeQueue":       self.tray_badge_var.get(),
-            "alpha":                round(self.alpha_var.get(), 2),
-            "overlayWidth":         self.width_var.get(),
-            "alwaysVisible":        self.always_var.get(),
-            "alertQueues":          [n for n, v in self.alert_queue_vars.items() if v.get()],
-            "alertQueue":           next((n for n, v in self.alert_queue_vars.items() if v.get()), ""),
-            "slaField":             self.sla_field_var.get().strip() or "Time to resolution",
-            "completedTodayFilter": self.completed_filter_var.get().strip(),
-            "skipKeywords":         [k.strip() for k in self.skip_kw_var.get().split(",") if k.strip()],
-            "maxQueueSize":         int(self.max_queue_var.get()),
-        }
-        self.win.destroy()
-
-
-# ---------------------------------------------------------------------------
 # Newly-opened ticket tooltip (clickable + mark as seen)
 # ---------------------------------------------------------------------------
 
@@ -663,7 +431,7 @@ class JiraOverlay:
         self.sla_compliance   = None  # int % or None if unavailable
         self._sla_unavailable  = False # set True after confirmed field-not-found
         self._settings_changed = False # re-fetch immediately after settings save
-        self._settings_open    = False # block right-click menu while Settings is open
+        self._in_settings      = False # True while inline settings panel is showing
         self.loading           = False
         self.error_msg       = None
         self._error_count    = 0
@@ -711,7 +479,7 @@ class JiraOverlay:
             pystray.MenuItem("Show / Hide",                    self._tray_toggle, default=True),
             pystray.MenuItem(f"Open {desk_name} in Jira",     lambda: webbrowser.open(sd_url)),
             pystray.MenuItem("Refresh now",       lambda: self.root.after(0, self._fetch)),
-            pystray.MenuItem("Settings…",         lambda: self.root.after(0, self._open_settings)),
+            pystray.MenuItem("Settings…",         lambda: self.root.after(0, self._toggle_settings)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit",              lambda: self.root.after(0, self.root.destroy)),
         )
@@ -737,21 +505,33 @@ class JiraOverlay:
         self.frame = tk.Frame(self.root, bg="#16213e", padx=12, pady=8)
         self.frame.pack(fill="both", expand=True, padx=1, pady=1)
 
+        # ── Header (always visible) ──────────────────────────────────────────
         hdr = tk.Frame(self.frame, bg="#16213e")
         hdr.pack(fill="x")
         desk = self.config.get("serviceDeskName", "JIRA")
         self.lbl_title = tk.Label(hdr, text=f"● {desk.upper()}",
                                    font=("Segoe UI", 8, "bold"), fg="#0052cc", bg="#16213e")
         self.lbl_title.pack(side="left")
+        # Gear button — opens inline settings
+        self.btn_gear = tk.Label(hdr, text="⚙", font=("Segoe UI", 10),
+                                  fg="#4a5568", bg="#16213e", cursor="hand2")
+        self.btn_gear.pack(side="right")
+        self.btn_gear.bind("<ButtonRelease-1>", lambda e: self._toggle_settings())
+        self.btn_gear.bind("<Enter>", lambda e: self.btn_gear.config(fg="#a0aec0"))
+        self.btn_gear.bind("<Leave>", lambda e: self.btn_gear.config(fg="#4a5568"))
 
         tk.Frame(self.frame, bg="#2d3748", height=1).pack(fill="x", pady=(4, 4))
 
-        self.rows_frame = tk.Frame(self.frame, bg="#16213e")
+        # ── Main panel (queue mode) ──────────────────────────────────────────
+        self.main_panel = tk.Frame(self.frame, bg="#16213e")
+        self.main_panel.pack(fill="both", expand=True)
+
+        self.rows_frame = tk.Frame(self.main_panel, bg="#16213e")
         self.rows_frame.pack(fill="both", expand=True)
         self.row_widgets: dict = {}
 
-        tk.Frame(self.frame, bg="#2d3748", height=1).pack(fill="x", pady=(6, 2))
-        done_row = tk.Frame(self.frame, bg="#16213e")
+        tk.Frame(self.main_panel, bg="#2d3748", height=1).pack(fill="x", pady=(6, 2))
+        done_row = tk.Frame(self.main_panel, bg="#16213e")
         done_row.pack(fill="x", pady=1)
         self.lbl_done = tk.Label(done_row, text="✓  Completed today — —",
                                   font=("Segoe UI", 9), fg="#68d391", bg="#16213e")
@@ -765,17 +545,21 @@ class JiraOverlay:
             w.bind("<ButtonRelease-1>", lambda e: self._open_completed_today())
             w.bind("<Button-3>",        self._show_menu)
 
-        tk.Frame(self.frame, bg="#2d3748", height=1).pack(fill="x", pady=(0, 2))
-        self.lbl_status = tk.Label(self.frame, text="Connecting…",
+        tk.Frame(self.main_panel, bg="#2d3748", height=1).pack(fill="x", pady=(0, 2))
+        self.lbl_status = tk.Label(self.main_panel, text="Connecting…",
                                     font=("Segoe UI", 7), fg="#4a5568", bg="#16213e", anchor="w")
         self.lbl_status.pack(fill="x")
+
+        # ── Settings panel (hidden until gear is clicked) ────────────────────
+        self.settings_panel = tk.Frame(self.frame, bg="#16213e")
+        # Not packed yet — shown by _toggle_settings()
 
         # Right-click menu
         self.menu = tk.Menu(self.root, tearoff=0, bg="#2d3748", fg="#e2e8f0",
                             activebackground="#4a5568", activeforeground="white",
                             font=("Segoe UI", 9))
         self.menu.add_command(label="↻  Refresh now",    command=self._fetch)
-        self.menu.add_command(label="⚙  Settings…",      command=lambda: (self.menu.unpost(), self.root.after(10, self._open_settings)))
+        self.menu.add_command(label="⚙  Settings",       command=self._toggle_settings)
         self.menu.add_separator()
         snooze = tk.Menu(self.menu, tearoff=0, bg="#2d3748", fg="#e2e8f0",
                          activebackground="#4a5568", activeforeground="white",
@@ -890,8 +674,6 @@ class JiraOverlay:
         self._did_drag = False
 
     def _show_menu(self, e):
-        if self._settings_open:
-            return
         self.menu.tk_popup(e.x_root, e.y_root)
 
     # ── Corner snapping ───────────────────────────────────────────────────────
@@ -1406,38 +1188,213 @@ class JiraOverlay:
 
         self.root.geometry(f"+{x}+{y}")
 
-    # ── Settings ──────────────────────────────────────────────────────────────
+    # ── Inline settings ───────────────────────────────────────────────────────
 
-    def _open_settings(self):
-        if self._settings_open:
+    def _toggle_settings(self):
+        """Switch the overlay between queue view and inline settings view."""
+        if self._in_settings:
+            self._cancel_settings()
             return
-        self.menu.unpost()            # dismiss any open context menu first
-        self._settings_open = True
-        self.root.attributes("-topmost", False)
-        dlg = None
-        try:
-            names = self._all_queue_names or [q["name"] for q in self.queues]
-            dlg   = SettingsDialog(self.root, self.config, names)
-        finally:
-            self._settings_open = False
-            self.root.attributes("-topmost", True)
-            # Flush root window state — without this, subsequent Toplevels
-            # parented to an overrideredirect+withdrawn window lose event routing
-            if not self._visible:
-                self.root.deiconify()
-                self.root.update_idletasks()
-                self.root.withdraw()
-        if dlg and dlg.result:
-            self.config.update(dlg.result)
-            save_config(self.config)
-            for rw in self.row_widgets.values():
-                rw["row"].destroy()
-            self.row_widgets.clear()
-            if self.loading:
-                # A fetch is in-flight with stale config — flag it to re-fetch on completion
-                self._settings_changed = True
-            else:
-                self._fetch()
+        self._in_settings = True
+        # Ensure overlay is visible
+        if not self._visible:
+            self._do_show()
+        self.btn_gear.config(text="✕")
+        self.main_panel.pack_forget()
+        self._build_settings_panel()
+        self.settings_panel.pack(fill="both", expand=True)
+        self.root.after(10, self._resize_settings)
+
+    def _resize_settings(self):
+        self.root.update_idletasks()
+        w = max(self.config.get("overlayWidth", 260), 320)
+        h = self.frame.winfo_reqheight() + 4
+        self.root.geometry(f"{w}x{min(h, int(self._sh * 0.7))}")
+        self._reposition()
+
+    def _build_settings_panel(self):
+        """Destroy and rebuild the settings panel content from current config."""
+        for w in self.settings_panel.winfo_children():
+            w.destroy()
+
+        cfg          = self.config
+        queue_names  = self._all_queue_names or [q["name"] for q in self.queues]
+        BG, FG, SEL  = "#16213e", "#a0aec0", "#2d3748"
+
+        def section(text):
+            tk.Label(self.settings_panel, text=text.upper(), font=("Segoe UI", 7, "bold"),
+                     fg="#4a5568", bg=BG).pack(anchor="w", padx=12, pady=(10, 0))
+            tk.Frame(self.settings_panel, bg="#2d3748", height=1).pack(fill="x", padx=12, pady=(2, 2))
+
+        def check(parent, text, var):
+            tk.Checkbutton(parent, text=text, variable=var, fg=FG, bg=BG,
+                           selectcolor=SEL, activeforeground="#e2e8f0", activebackground=BG,
+                           font=("Segoe UI", 9)).pack(anchor="w", padx=16, pady=1)
+
+        # ── Scrollable body ──────────────────────────────────────────────────
+        wrap   = tk.Frame(self.settings_panel, bg=BG)
+        wrap.pack(fill="both", expand=True)
+        canvas = tk.Canvas(wrap, bg=BG, highlightthickness=0)
+        sb     = tk.Scrollbar(wrap, orient="vertical", command=canvas.yview)
+        body   = tk.Frame(canvas, bg=BG)
+        body.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        cw_id  = canvas.create_window((0, 0), window=body, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(cw_id, width=e.width))
+        def _scroll(e): canvas.yview_scroll(-1*(e.delta//120), "units")
+        canvas.bind("<MouseWheel>", _scroll)
+        body.bind("<MouseWheel>", _scroll)
+        sb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # Refresh interval
+        section("Refresh interval")
+        rf = tk.Frame(body, bg=BG); rf.pack(fill="x", padx=16, pady=(0, 4))
+        self._s_refresh = tk.IntVar(value=cfg.get("refreshSeconds", 30))
+        for secs, lbl in [(15,"15 s"),(30,"30 s"),(60,"1 min"),(120,"2 min"),(300,"5 min")]:
+            tk.Radiobutton(rf, text=lbl, variable=self._s_refresh, value=secs,
+                           fg=FG, bg=BG, selectcolor=SEL, activeforeground="#e2e8f0",
+                           activebackground=BG, font=("Segoe UI", 9)).pack(side="left", padx=(0,8))
+
+        # Alerts
+        section("Alerts")
+        self._s_notif = tk.BooleanVar(value=cfg.get("notificationsEnabled", True))
+        self._s_sound = tk.BooleanVar(value=cfg.get("soundEnabled", True))
+        check(body, "Desktop notification", self._s_notif)
+        check(body, "Sound alert",           self._s_sound)
+
+        # Appearance
+        section("Appearance")
+        af = tk.Frame(body, bg=BG); af.pack(fill="x", padx=16, pady=(0,4))
+        tk.Label(af, text="Transparency", font=("Segoe UI", 9), fg=FG, bg=BG).grid(row=0,column=0,sticky="w")
+        self._s_alpha = tk.DoubleVar(value=cfg.get("alpha", 0.93))
+        tk.Scale(af, from_=0.3, to=1.0, resolution=0.05, orient="horizontal", variable=self._s_alpha,
+                 length=140, bg=BG, fg=FG, troughcolor=SEL, highlightthickness=0, sliderrelief="flat"
+                 ).grid(row=0, column=1, padx=(8,0))
+        tk.Label(af, text="Width", font=("Segoe UI", 9), fg=FG, bg=BG).grid(row=1,column=0,sticky="w",pady=(6,0))
+        self._s_width = tk.IntVar(value=cfg.get("overlayWidth", 260))
+        tk.Scale(af, from_=200, to=420, resolution=10, orient="horizontal", variable=self._s_width,
+                 length=140, bg=BG, fg=FG, troughcolor=SEL, highlightthickness=0, sliderrelief="flat"
+                 ).grid(row=1, column=1, padx=(8,0), pady=(6,0))
+        self._s_always = tk.BooleanVar(value=cfg.get("alwaysVisible", False))
+        check(body, "Always show (dashboard mode)", self._s_always)
+
+        # Queue filtering
+        section("Queue filtering")
+        kf = tk.Frame(body, bg=BG); kf.pack(fill="x", padx=16, pady=(0,4))
+        tk.Label(kf, text="Hide queues whose name contains:", font=("Segoe UI", 8), fg=FG, bg=BG
+                 ).pack(anchor="w")
+        self._s_skip_kw = tk.StringVar(value=", ".join(cfg.get("skipKeywords", [])))
+        tk.Entry(kf, textvariable=self._s_skip_kw, bg=SEL, fg="#e2e8f0",
+                 insertbackground="white", relief="flat", font=("Segoe UI", 9)
+                 ).pack(fill="x", ipady=3, pady=(2,6))
+        tk.Label(kf, text="Hide queues with more than N tickets (0=no limit):", font=("Segoe UI", 8), fg=FG, bg=BG
+                 ).pack(anchor="w")
+        self._s_max_q = tk.IntVar(value=cfg.get("maxQueueSize", 0))
+        tk.Spinbox(kf, from_=0, to=999999, increment=1000, textvariable=self._s_max_q,
+                   width=10, bg=SEL, fg="#e2e8f0", insertbackground="white",
+                   relief="flat", font=("Segoe UI", 9), buttonbackground=SEL
+                   ).pack(anchor="w", ipady=3, pady=(2,0))
+
+        # Queues to show
+        if queue_names:
+            section("Queues to show")
+            hidden = set(cfg.get("hiddenQueues", []))
+            self._s_queue_vars = {n: tk.BooleanVar(value=n not in hidden) for n in queue_names}
+            for name, var in self._s_queue_vars.items():
+                check(body, name, var)
+        else:
+            self._s_queue_vars = {}
+
+        # Tray badge
+        section("Tray badge shows")
+        self._s_tray_badge = tk.StringVar(value=cfg.get("trayBadgeQueue", ""))
+        for name in queue_names:
+            tk.Radiobutton(body, text=name, variable=self._s_tray_badge, value=name,
+                           fg=FG, bg=BG, selectcolor=SEL, activeforeground="#e2e8f0",
+                           activebackground=BG, font=("Segoe UI", 9)).pack(anchor="w", padx=16)
+
+        # Alert queues
+        section("Alert queues (trigger overlay + notifications)")
+        current_alerts = set(cfg.get("alertQueues",
+                             [cfg.get("alertQueue","")] if cfg.get("alertQueue") else []))
+        self._s_alert_vars = {}
+        for name in queue_names:
+            var = tk.BooleanVar(value=name in current_alerts)
+            self._s_alert_vars[name] = var
+            check(body, name, var)
+
+        # SLA + completed filter
+        section("SLA & completed today")
+        sf = tk.Frame(body, bg=BG); sf.pack(fill="x", padx=16, pady=(0,4))
+        tk.Label(sf, text="SLA field name:", font=("Segoe UI", 9), fg=FG, bg=BG).pack(anchor="w")
+        self._s_sla = tk.StringVar(value=cfg.get("slaField", "Time to resolution"))
+        tk.Entry(sf, textvariable=self._s_sla, bg=SEL, fg="#e2e8f0",
+                 insertbackground="white", relief="flat", font=("Segoe UI", 9)
+                 ).pack(fill="x", ipady=3, pady=(2,6))
+        tk.Label(sf, text='Extra JQL filter (e.g. "assignee is not EMPTY"):', font=("Segoe UI", 8), fg=FG, bg=BG
+                 ).pack(anchor="w")
+        self._s_completed_filter = tk.StringVar(value=cfg.get("completedTodayFilter", ""))
+        tk.Entry(sf, textvariable=self._s_completed_filter, bg=SEL, fg="#e2e8f0",
+                 insertbackground="white", relief="flat", font=("Segoe UI", 9)
+                 ).pack(fill="x", ipady=3, pady=(2,0))
+
+        # System
+        section("System")
+        self._s_startup = tk.BooleanVar(value=startup_enabled())
+        check(body, "Run on Windows startup", self._s_startup)
+        tk.Frame(body, bg=BG, height=6).pack()
+
+        # ── Save / Cancel buttons ────────────────────────────────────────────
+        bf = tk.Frame(self.settings_panel, bg=BG)
+        bf.pack(fill="x", pady=(4, 0))
+        tk.Button(bf, text="✓  Save", command=self._save_settings,
+                  bg="#0052cc", fg="white", font=("Segoe UI", 9, "bold"),
+                  relief="flat", padx=10, pady=5, cursor="hand2",
+                  activebackground="#0040a0", activeforeground="white"
+                  ).pack(side="left", padx=(0, 4))
+        tk.Button(bf, text="✕  Cancel", command=self._cancel_settings,
+                  bg=SEL, fg=FG, font=("Segoe UI", 9),
+                  relief="flat", padx=10, pady=5, cursor="hand2"
+                  ).pack(side="left")
+
+    def _save_settings(self):
+        set_startup(self._s_startup.get())
+        hidden      = [n for n, v in self._s_queue_vars.items() if not v.get()]
+        alert_list  = [n for n, v in self._s_alert_vars.items() if v.get()]
+        new_cfg = {
+            "refreshSeconds":       self._s_refresh.get(),
+            "notificationsEnabled": self._s_notif.get(),
+            "soundEnabled":         self._s_sound.get(),
+            "hiddenQueues":         hidden,
+            "trayBadgeQueue":       self._s_tray_badge.get(),
+            "alpha":                round(self._s_alpha.get(), 2),
+            "overlayWidth":         self._s_width.get(),
+            "alwaysVisible":        self._s_always.get(),
+            "alertQueues":          alert_list,
+            "alertQueue":           alert_list[0] if alert_list else "",
+            "slaField":             self._s_sla.get().strip() or "Time to resolution",
+            "completedTodayFilter": self._s_completed_filter.get().strip(),
+            "skipKeywords":         [k.strip() for k in self._s_skip_kw.get().split(",") if k.strip()],
+            "maxQueueSize":         int(self._s_max_q.get()),
+        }
+        self.config.update(new_cfg)
+        save_config(self.config)
+        self._cancel_settings()   # return to queue view
+        for rw in self.row_widgets.values():
+            rw["row"].destroy()
+        self.row_widgets.clear()
+        if self.loading:
+            self._settings_changed = True
+        else:
+            self._fetch()
+
+    def _cancel_settings(self):
+        self._in_settings = False
+        self.btn_gear.config(text="⚙")
+        self.settings_panel.pack_forget()
+        self.main_panel.pack(fill="both", expand=True)
+        self.root.after(10, self._resize)
 
     def _reconfigure(self):
         if messagebox.askyesno("Reconfigure", "Clear saved credentials and restart setup?",
