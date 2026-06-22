@@ -706,9 +706,15 @@ class JiraOverlay:
         self.settings_panel = tk.Frame(self.frame, bg=BG)
 
         # Bind drag to structural chrome widgets
-        for w in (self.root, self.frame, hdr, self.lbl_title):
+        for w in (self.root, self.frame, hdr):
             self._bind_drag(w)
-        hdr.bind("<Double-Button-1>",       lambda _e: self._snap_to_nearest_corner())
+        # Title participates in drag press/move but release opens the service desk
+        self.lbl_title.bind("<ButtonPress-1>", self._drag_press)
+        self.lbl_title.bind("<B1-Motion>",     self._drag_move)
+        self.lbl_title.bind("<ButtonRelease-1>",
+                            lambda _e: self._open_service_desk()
+                            if not self._did_drag else self._drag_release(_e))
+        hdr.bind("<Double-Button-1>",            lambda _e: self._snap_to_nearest_corner())
         self.lbl_title.bind("<Double-Button-1>", lambda _e: self._snap_to_nearest_corner())
 
     @staticmethod
