@@ -663,6 +663,7 @@ class JiraOverlay:
         self.sla_compliance   = None  # int % or None if unavailable
         self._sla_unavailable  = False # set True after confirmed field-not-found
         self._settings_changed = False # re-fetch immediately after settings save
+        self._settings_open    = False # block right-click menu while Settings is open
         self.loading           = False
         self.error_msg       = None
         self._error_count    = 0
@@ -889,7 +890,12 @@ class JiraOverlay:
         self._did_drag = False
 
     def _show_menu(self, e):
-        self.menu.tk_popup(e.x_root, e.y_root)
+        if self._settings_open:
+            return
+        try:
+            self.menu.tk_popup(e.x_root, e.y_root)
+        finally:
+            self.menu.grab_release()
 
     # ── Corner snapping ───────────────────────────────────────────────────────
 
@@ -1406,13 +1412,19 @@ class JiraOverlay:
     # ── Settings ──────────────────────────────────────────────────────────────
 
     def _open_settings(self):
+        if self._settings_open:
+            return
+        self.menu.unpost()            # dismiss any open context menu first
+        self._settings_open = True
         self.root.attributes("-topmost", False)
+        dlg = None
         try:
             names = self._all_queue_names or [q["name"] for q in self.queues]
             dlg   = SettingsDialog(self.root, self.config, names)
         finally:
+            self._settings_open = False
             self.root.attributes("-topmost", True)
-        if dlg.result:
+        if dlg and dlg.result:
             self.config.update(dlg.result)
             save_config(self.config)
             for rw in self.row_widgets.values():
