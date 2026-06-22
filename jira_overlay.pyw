@@ -33,6 +33,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import tkinter as tk
 from tkinter import messagebox
+from idlelib.tooltip import Hovertip
 
 # ---------------------------------------------------------------------------
 # Dependency bootstrap — must run before any third-party import
@@ -646,12 +647,14 @@ class JiraOverlay:
         self.lbl_title.bind("<Enter>", lambda _e: self.lbl_title.config(fg="#3399ff"))
         self.lbl_title.bind("<Leave>", lambda _e: self.lbl_title.config(fg=_C["accent"]))
         self.lbl_title.bind("<ButtonRelease-1>", lambda _e: self._open_service_desk())
+        Hovertip(self.lbl_title, "Open service desk in Jira", hover_delay=600)
         self.btn_gear = tk.Label(hdr, text="⚙", font=("Segoe UI", 10),
                                  fg=_C["fg_dim"], bg=BG, cursor="hand2")
         self.btn_gear.pack(side="right")
         self.btn_gear.bind("<ButtonRelease-1>", lambda _e: self._toggle_settings())
         self.btn_gear.bind("<Enter>", lambda _e: self.btn_gear.config(fg=_C["fg"]))
         self.btn_gear.bind("<Leave>", lambda _e: self.btn_gear.config(fg=_C["fg_dim"]))
+        Hovertip(self.btn_gear, "Settings", hover_delay=600)
 
         tk.Frame(self.frame, bg=_C["divider"], height=1).pack(fill="x", pady=(4, 4))
 
@@ -685,18 +688,22 @@ class JiraOverlay:
             w.bind("<ButtonRelease-1>", lambda _e: self._open_completed_today())
             w.bind("<Enter>", lambda _e: _done_hover("#1e3a2e"))
             w.bind("<Leave>", lambda _e: _done_hover(BG))
+        Hovertip(self.lbl_done, "Open completed tickets in Jira", hover_delay=600)
 
         tk.Frame(self.main_panel, bg=_C["divider"], height=1).pack(fill="x", pady=(4, 2))
 
         # Footer: action buttons + status
         footer = tk.Frame(self.main_panel, bg=BG)
         footer.pack(fill="x")
-        self.btn_snooze_icon = self._footer_btn(footer, "💤", self._snooze_cycle)
-        self._footer_btn(footer, "↻",  self._fetch).pack(side="left", padx=(0, 8))
+        self.btn_snooze_icon = self._footer_btn(
+            footer, "💤", self._snooze_cycle, tip="Snooze alerts")
+        self._footer_btn(footer, "↻", self._fetch,
+                         tip="Refresh now").pack(side="left", padx=(0, 8))
         self.btn_snooze_icon.pack(side="left", padx=(0, 8))
-        self._footer_btn(footer, "⊟",  self._do_hide).pack(side="left", padx=(0, 8))
-        self._footer_btn(footer, "✕",  self.root.destroy,
-                         color=_C["alert"]).pack(side="left")
+        self._footer_btn(footer, "⊟", self._do_hide,
+                         tip="Hide overlay").pack(side="left", padx=(0, 8))
+        self._footer_btn(footer, "✕", self.root.destroy,
+                         color=_C["alert"], tip="Quit").pack(side="left")
         self.lbl_status = tk.Label(footer, text="Connecting…",
                                    font=("Segoe UI", 7),
                                    fg=_C["fg_dim"], bg=BG, anchor="e")
@@ -719,13 +726,16 @@ class JiraOverlay:
 
     @staticmethod
     def _footer_btn(parent: tk.Frame, text: str, cmd,
-                    color: str = _C["fg_dim"]) -> tk.Label:
+                    color: str = _C["fg_dim"],
+                    tip: str = "") -> tk.Label:
         btn = tk.Label(parent, text=text, font=("Segoe UI", 10),
                        fg=color, bg=_C["bg"], cursor="hand2")
         btn.bind("<ButtonRelease-1>", lambda _e: cmd())
         btn.bind("<Enter>",  lambda _e: btn.config(fg=_C["fg_bright"]))
         btn.bind("<Leave>",  lambda _e: btn.config(fg=color))
-        btn.bind("<ButtonPress-1>",   lambda e: None)  # absorbed — drag handled at frame level
+        btn.bind("<ButtonPress-1>",   lambda e: None)
+        if tip:
+            Hovertip(btn, tip, hover_delay=600)
         return btn
 
     def _bind_drag(self, w: tk.Widget) -> None:
@@ -765,6 +775,10 @@ class JiraOverlay:
             w.bind("<ButtonPress-1>",   self._drag_press)
             w.bind("<B1-Motion>",       self._drag_move)
             w.bind("<ButtonRelease-1>", lambda e, u=url: self._row_click(e, u))
+
+        tip_text = ("Click to open · hover for ticket list" if is_new
+                    else "Click to open queue in Jira")
+        Hovertip(row, tip_text, hover_delay=600)
 
         if is_new:
             for w in (row, lbl_name, lbl_count, dot):
