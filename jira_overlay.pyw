@@ -803,11 +803,42 @@ class JiraOverlay:
         self._did_drag = False
 
     def _snooze_cycle(self) -> None:
-        """Toggle snooze state: snoozed → cancel, idle → 30 min."""
+        """If snoozed, cancel immediately; otherwise show duration picker."""
         if self._is_snoozed():
             self._cancel_snooze()
         else:
-            self._snooze(30)
+            self._show_snooze_popup()
+
+    def _show_snooze_popup(self) -> None:
+        """Small popup with snooze duration choices, positioned above the 💤 button."""
+        popup = tk.Toplevel(self.root)
+        popup.overrideredirect(True)
+        popup.attributes("-topmost", True)
+        popup.configure(bg=_C["divider"])   # 1-px border effect
+
+        inner = tk.Frame(popup, bg=_C["input"])
+        inner.pack(padx=1, pady=1)
+
+        for label, minutes in [("Snooze 15 min", 15),
+                                ("Snooze 30 min", 30),
+                                ("Snooze 1 hour", 60)]:
+            tk.Button(inner, text=label,
+                      command=lambda m=minutes, p=popup: (p.destroy(), self._snooze(m)),
+                      bg=_C["input"], fg=_C["fg_bright"],
+                      font=("Segoe UI", 9), relief="flat",
+                      padx=16, pady=5, cursor="hand2",
+                      activebackground=_C["accent"],
+                      activeforeground="white").pack(fill="x")
+
+        popup.update_idletasks()
+        bx = self.btn_snooze_icon.winfo_rootx()
+        by = self.btn_snooze_icon.winfo_rooty()
+        ph = popup.winfo_reqheight()
+        popup.geometry(f"+{bx}+{max(0, by - ph - 4)}")
+
+        popup.focus_force()
+        popup.bind("<FocusOut>",
+                   lambda _e: popup.destroy() if popup.winfo_exists() else None)
 
     # ── Corner snapping ───────────────────────────────────────────────────────
 
