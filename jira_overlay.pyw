@@ -543,37 +543,35 @@ class JiraOverlay:
             w.bind("<ButtonPress-1>",   self._drag_press)
             w.bind("<B1-Motion>",       self._drag_move)
             w.bind("<ButtonRelease-1>", lambda e: self._open_completed_today())
-            w.bind("<Button-3>",        self._show_menu)
 
-        tk.Frame(self.main_panel, bg="#2d3748", height=1).pack(fill="x", pady=(0, 2))
-        self.lbl_status = tk.Label(self.main_panel, text="Connecting…",
-                                    font=("Segoe UI", 7), fg="#4a5568", bg="#16213e", anchor="w")
-        self.lbl_status.pack(fill="x")
+        tk.Frame(self.main_panel, bg="#2d3748", height=1).pack(fill="x", pady=(4, 2))
 
-        # ── Settings panel (hidden until gear is clicked) ────────────────────
+        # ── Action buttons + status (replaces right-click menu) ──────────────
+        footer = tk.Frame(self.main_panel, bg="#16213e")
+        footer.pack(fill="x")
+
+        def _fbtn(parent, text, cmd, tip_color="#4a5568"):
+            b = tk.Label(parent, text=text, font=("Segoe UI", 10), fg=tip_color,
+                         bg="#16213e", cursor="hand2")
+            b.bind("<ButtonRelease-1>", lambda e: cmd())
+            b.bind("<Enter>",  lambda e: b.config(fg="#e2e8f0"))
+            b.bind("<Leave>",  lambda e: b.config(fg=tip_color))
+            b.bind("<ButtonPress-1>",   self._drag_press)
+            b.bind("<B1-Motion>",       self._drag_move)
+            return b
+
+        _fbtn(footer, "↻", self._fetch).pack(side="left", padx=(0, 8))
+        self.btn_snooze_icon = _fbtn(footer, "💤", self._snooze_cycle)
+        self.btn_snooze_icon.pack(side="left", padx=(0, 8))
+        _fbtn(footer, "⊟", self._do_hide).pack(side="left", padx=(0, 8))
+        _fbtn(footer, "✕", self.root.destroy, "#fc8181").pack(side="left")
+
+        self.lbl_status = tk.Label(footer, text="Connecting…",
+                                    font=("Segoe UI", 7), fg="#4a5568", bg="#16213e", anchor="e")
+        self.lbl_status.pack(side="right")
+
+        # ── Settings panel (hidden until ⚙ is clicked) ──────────────────────
         self.settings_panel = tk.Frame(self.frame, bg="#16213e")
-        # Not packed yet — shown by _toggle_settings()
-
-        # Right-click menu
-        self.menu = tk.Menu(self.root, tearoff=0, bg="#2d3748", fg="#e2e8f0",
-                            activebackground="#4a5568", activeforeground="white",
-                            font=("Segoe UI", 9))
-        self.menu.add_command(label="↻  Refresh now",    command=self._fetch)
-        self.menu.add_command(label="⚙  Settings",       command=self._toggle_settings)
-        self.menu.add_separator()
-        snooze = tk.Menu(self.menu, tearoff=0, bg="#2d3748", fg="#e2e8f0",
-                         activebackground="#4a5568", activeforeground="white",
-                         font=("Segoe UI", 9))
-        snooze.add_command(label="15 minutes",    command=lambda: self._snooze(15))
-        snooze.add_command(label="30 minutes",    command=lambda: self._snooze(30))
-        snooze.add_command(label="1 hour",        command=lambda: self._snooze(60))
-        snooze.add_command(label="Cancel snooze", command=self._cancel_snooze)
-        self.menu.add_cascade(label="💤  Snooze alerts…", menu=snooze)
-        self.menu.add_command(label="⊟  Hide overlay",   command=self._do_hide)
-        self.menu.add_command(label="⌖  Snap to corner", command=self._snap_to_nearest_corner)
-        self.menu.add_separator()
-        self.menu.add_command(label="⚙  Reconfigure credentials…", command=self._reconfigure)
-        self.menu.add_command(label="✕  Quit",            command=self.root.destroy)
 
         self._bind(self.root)
         self._bind(self.frame)
@@ -586,7 +584,6 @@ class JiraOverlay:
         w.bind("<ButtonPress-1>",   self._drag_press)
         w.bind("<B1-Motion>",       self._drag_move)
         w.bind("<ButtonRelease-1>", self._drag_release)
-        w.bind("<Button-3>",        self._show_menu)
 
     def _make_row(self, queue: dict):
         name   = queue["name"]
@@ -619,7 +616,6 @@ class JiraOverlay:
             w.bind("<ButtonPress-1>",   self._drag_press)
             w.bind("<B1-Motion>",       self._drag_move)
             w.bind("<ButtonRelease-1>", lambda e, u=url: self._row_click(e, u))
-            w.bind("<Button-3>",        self._show_menu)
 
         if is_new:
             for w in [row, lbl_name, lbl_count, dot]:
@@ -673,8 +669,14 @@ class JiraOverlay:
             webbrowser.open(url)
         self._did_drag = False
 
-    def _show_menu(self, e):
-        self.menu.tk_popup(e.x_root, e.y_root)
+    def _snooze_cycle(self):
+        """Toggle snooze: active → cancel, inactive → 30 min."""
+        if self._is_snoozed():
+            self._cancel_snooze()
+            self.btn_snooze_icon.config(fg="#4a5568")
+        else:
+            self._snooze(30)
+            self.btn_snooze_icon.config(fg="#fbd38d")
 
     # ── Corner snapping ───────────────────────────────────────────────────────
 
@@ -1046,7 +1048,7 @@ class JiraOverlay:
             self.lbl_status.config(text=f"Snoozed until {until}  ·  right-click to cancel",
                                    fg="#fbd38d")
         else:
-            self.lbl_status.config(text="Updated just now  ·  right-click for options",
+            self.lbl_status.config(text="Updated just now",
                                    fg="#4a5568")
 
         always = self.config.get("alwaysVisible", False)
@@ -1097,7 +1099,7 @@ class JiraOverlay:
             else:
                 rel = f"{int(secs//3600)}h ago"
             self.lbl_status.config(
-                text=f"Updated {rel}  ·  right-click for options", fg="#4a5568")
+                text=f"Updated {rel}", fg="#4a5568")
         self.root.after(30_000, self._update_relative_time)
 
     # ── Snooze ────────────────────────────────────────────────────────────────
@@ -1343,7 +1345,11 @@ class JiraOverlay:
         section("System")
         self._s_startup = tk.BooleanVar(value=startup_enabled())
         check(body, "Run on Windows startup", self._s_startup)
-        tk.Frame(body, bg=BG, height=6).pack()
+        tk.Frame(body, bg=BG, height=4).pack()
+        tk.Button(body, text="⚙  Reconfigure credentials…", command=self._reconfigure,
+                  bg=SEL, fg=FG, font=("Segoe UI", 9), relief="flat",
+                  padx=8, pady=4, cursor="hand2"
+                  ).pack(anchor="w", padx=16, pady=(0, 8))
 
         # ── Save / Cancel buttons ────────────────────────────────────────────
         bf = tk.Frame(self.settings_panel, bg=BG)
