@@ -409,7 +409,7 @@ class SettingsDialog:
         self.win.geometry(f"460x{win_h}+{sw//2-230}+{sh//2-win_h//2}")
         self.win.minsize(460, 300)
 
-        self.win.grab_set()
+        self.win.focus_force()
         self.win.wait_window(self.win)
 
     def _section(self, text):
@@ -1032,7 +1032,7 @@ class JiraOverlay:
         win.geometry(f"380x{total_h}+{sw//2-190}+{sh//2-total_h//2}")
         canvas.configure(height=btn_h)
 
-        win.grab_set()
+        win.focus_force()
         win.wait_window(win)
 
         if self.config.get("alertQueue"):
@@ -1424,6 +1424,12 @@ class JiraOverlay:
         finally:
             self._settings_open = False
             self.root.attributes("-topmost", True)
+            # Flush root window state — without this, subsequent Toplevels
+            # parented to an overrideredirect+withdrawn window lose event routing
+            if not self._visible:
+                self.root.deiconify()
+                self.root.update_idletasks()
+                self.root.withdraw()
         if dlg and dlg.result:
             self.config.update(dlg.result)
             save_config(self.config)
