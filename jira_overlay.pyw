@@ -641,8 +641,11 @@ class JiraOverlay:
         desk = self.config.get("serviceDeskName", "JIRA")
         self.lbl_title = tk.Label(hdr, text=f"● {desk.upper()}",
                                   font=("Segoe UI", 8, "bold"),
-                                  fg=_C["accent"], bg=BG)
+                                  fg=_C["accent"], bg=BG, cursor="hand2")
         self.lbl_title.pack(side="left")
+        self.lbl_title.bind("<Enter>", lambda _e: self.lbl_title.config(fg="#3399ff"))
+        self.lbl_title.bind("<Leave>", lambda _e: self.lbl_title.config(fg=_C["accent"]))
+        self.lbl_title.bind("<ButtonRelease-1>", lambda _e: self._open_service_desk())
         self.btn_gear = tk.Label(hdr, text="⚙", font=("Segoe UI", 10),
                                  fg=_C["fg_dim"], bg=BG, cursor="hand2")
         self.btn_gear.pack(side="right")
@@ -661,18 +664,27 @@ class JiraOverlay:
         self.row_widgets: dict[str, dict] = {}
 
         tk.Frame(self.main_panel, bg=_C["divider"], height=1).pack(fill="x", pady=(6, 2))
-        done_row = tk.Frame(self.main_panel, bg=BG)
+        done_row = tk.Frame(self.main_panel, bg=BG, cursor="hand2")
         done_row.pack(fill="x", pady=1)
         self.lbl_done = tk.Label(done_row, text="✓  Completed today — —",
-                                 font=("Segoe UI", 9), fg=_C["ok"], bg=BG)
+                                 font=("Segoe UI", 9), fg=_C["ok"], bg=BG,
+                                 cursor="hand2")
         self.lbl_done.pack(side="left")
         self.lbl_sla = tk.Label(done_row, text="",
-                                font=("Segoe UI", 8, "bold"), fg=_C["ok"], bg=BG)
+                                font=("Segoe UI", 8, "bold"), fg=_C["ok"], bg=BG,
+                                cursor="hand2")
         self.lbl_sla.pack(side="right")
+
+        def _done_hover(bg: str) -> None:
+            for w in (done_row, self.lbl_done, self.lbl_sla):
+                w.configure(bg=bg)
+
         for w in (done_row, self.lbl_done, self.lbl_sla):
             w.bind("<ButtonPress-1>",   self._drag_press)
             w.bind("<B1-Motion>",       self._drag_move)
             w.bind("<ButtonRelease-1>", lambda _e: self._open_completed_today())
+            w.bind("<Enter>", lambda _e: _done_hover("#1e3a2e"))
+            w.bind("<Leave>", lambda _e: _done_hover(BG))
 
         tk.Frame(self.main_panel, bg=_C["divider"], height=1).pack(fill="x", pady=(4, 2))
 
@@ -881,11 +893,22 @@ class JiraOverlay:
     def _mark_all_seen(self) -> None:
         self._seen_newly_ids = set()
 
+    def _open_service_desk(self) -> None:
+        if self._did_drag:
+            return
+        pk  = self.config.get("projectKey", "")
+        url = (self._jira_url(f"/jira/servicedesk/projects/{pk}/queues")
+               if pk else self._jira_url("/jira/servicedesk"))
+        webbrowser.open(url)
+
     def _open_completed_today(self) -> None:
         if self._did_drag:
             return
         pk  = self.config.get("projectKey", "")
+        extra = self.config.get("completedTodayFilter", "").strip()
         jql = f"project = {pk} AND statusCategory = Done AND updated >= startOfDay()"
+        if extra:
+            jql += f" AND {extra}"
         webbrowser.open(self._jira_url(f"/issues/?jql={jql.replace(' ', '+')}"))
 
     # ── Service-desk discovery ────────────────────────────────────────────────
