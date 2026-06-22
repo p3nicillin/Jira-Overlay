@@ -45,6 +45,7 @@ import os
 import struct
 import subprocess
 import sys
+import math
 import threading
 import time
 import webbrowser
@@ -432,6 +433,8 @@ class JiraOverlay:
         self._sla_unavailable  = False # set True after confirmed field-not-found
         self._settings_changed = False # re-fetch immediately after settings save
         self._in_settings      = False # True while inline settings panel is showing
+        self._anim_job         = None  # pending after() id for settings animation
+        self._queue_geom       = None  # (w,h,x,y) saved before settings expands
         self.loading           = False
         self.error_msg       = None
         self._error_count    = 0
@@ -1192,27 +1195,82 @@ class JiraOverlay:
 
     # ── Inline settings ───────────────────────────────────────────────────────
 
+    # ── Settings animation constants ─────────────────────────────────────────
+    _SETTINGS_W    = 420   # width in settings mode
+    _ANIM_STEPS    = 20    # frames
+    _ANIM_MS       = 12    # ms per frame  (~240 ms total)
+
     def _toggle_settings(self):
-        """Switch the overlay between queue view and inline settings view."""
         if self._in_settings:
-            self._cancel_settings()
+            self._settings_anim(closing=True)
             return
         self._in_settings = True
-        # Ensure overlay is visible
+        # Show overlay if hidden (transparent while we measure)
         if not self._visible:
-            self._do_show()
+            self._visible = True
+            self.root.attributes("-alpha", self.config.get("alpha", 0.93))
+            self.root.deiconify()
+            self.root.update_idletasks()
+
         self.btn_gear.config(text="✕")
         self.main_panel.pack_forget()
         self._build_settings_panel()
         self.settings_panel.pack(fill="both", expand=True)
-        self.root.after(10, self._resize_settings)
-
-    def _resize_settings(self):
         self.root.update_idletasks()
-        w = max(self.config.get("overlayWidth", 260), 320)
-        h = self.frame.winfo_reqheight() + 4
-        self.root.geometry(f"{w}x{min(h, int(self._sh * 0.7))}")
-        self._reposition()
+        self._settings_anim(closing=False)
+
+    def _settings_anim(self, closing: bool):
+        """Start the open/close size animation."""
+        if self._anim_job:
+            self.root.after_cancel(self._anim_job)
+            self._anim_job = None
+
+        self.root.update_idletasks()
+        cw = self.root.winfo_width()
+        ch = self.root.winfo_height()
+        cx = self.root.winfo_x()
+        cy = self.root.winfo_y()
+
+        if not closing:
+            # Save queue geometry so we can restore it exactly
+            self._queue_geom = (cw, ch, cx, cy)
+            # Target: wide, tall — bottom-right corner stays fixed
+            tw  = self._SETTINGS_W
+            tx  = self._sw - tw - 20
+            bot = cy + ch                   # fixed bottom edge
+            ty  = max(20, bot - int(self._sh * 0.92))
+            th  = bot - ty
+            start, end = (cw, ch, cx, cy), (tw, th, tx, ty)
+        else:
+            # Animate back to saved queue dimensions
+            qw, qh, qx, qy = self._queue_geom or (cw, ch, cx, cy)
+            start, end = (cw, ch, cx, cy), (qw, qh, qx, qy)
+
+        self._run_anim(start, end, step=0, closing=closing)
+
+    def _run_anim(self, start, end, step: int, closing: bool):
+        t    = step / self._ANIM_STEPS
+        ease = (1 - math.cos(math.pi * t)) / 2
+        sw, sh, sx, sy = start
+        ew, eh, ex, ey = end
+        w = int(sw + (ew - sw) * ease)
+        h = int(sh + (eh - sh) * ease)
+        x = int(sx + (ex - sx) * ease)
+        y = int(sy + (ey - sy) * ease)
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+
+        if step < self._ANIM_STEPS:
+            self._anim_job = self.root.after(
+                self._ANIM_MS,
+                lambda: self._run_anim(start, end, step + 1, closing))
+        else:
+            self._anim_job = None
+            if closing:
+                self._in_settings = False
+                self.btn_gear.config(text="⚙")
+                self.settings_panel.pack_forget()
+                self.main_panel.pack(fill="both", expand=True)
+                self.root.after(10, self._resize)
 
     def _build_settings_panel(self):
         """Destroy and rebuild the settings panel content from current config."""
@@ -1387,7 +1445,7 @@ class JiraOverlay:
         }
         self.config.update(new_cfg)
         save_config(self.config)
-        self._cancel_settings()   # return to queue view
+        # Rebuild rows then animate close
         for rw in self.row_widgets.values():
             rw["row"].destroy()
         self.row_widgets.clear()
@@ -1395,13 +1453,10 @@ class JiraOverlay:
             self._settings_changed = True
         else:
             self._fetch()
+        self._settings_anim(closing=True)
 
     def _cancel_settings(self):
-        self._in_settings = False
-        self.btn_gear.config(text="⚙")
-        self.settings_panel.pack_forget()
-        self.main_panel.pack(fill="both", expand=True)
-        self.root.after(10, self._resize)
+        self._settings_anim(closing=True)
 
     def _reconfigure(self):
         if messagebox.askyesno("Reconfigure", "Clear saved credentials and restart setup?",
