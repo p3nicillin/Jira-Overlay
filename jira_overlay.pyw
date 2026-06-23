@@ -1364,18 +1364,20 @@ class JiraOverlay:
         else:
             self.lbl_status.config(text="Updated just now", fg=_C["fg_dim"])
 
-        show = (newly_count > 0 or self.config.get("alwaysVisible", False)) and not snoozed
-        if show:
-            self.root.after(10, self._resize)
-            if not self._visible and not self._show_job:
-                delay = 2_500 if has_new_alert else 0
-                self._show_job = self.root.after(delay, self._do_show)
-        else:
-            if self._show_job:
-                self.root.after_cancel(self._show_job)
-                self._show_job = None
-            if self._visible:
-                self._do_hide()
+        # Don't resize or show/hide while the settings panel is open — it has its own geometry
+        if not self._in_settings:
+            show = (newly_count > 0 or self.config.get("alwaysVisible", False)) and not snoozed
+            if show:
+                self.root.after(10, self._resize)
+                if not self._visible and not self._show_job:
+                    delay = 2_500 if has_new_alert else 0
+                    self._show_job = self.root.after(delay, self._do_show)
+            else:
+                if self._show_job:
+                    self.root.after_cancel(self._show_job)
+                    self._show_job = None
+                if self._visible:
+                    self._do_hide()
 
     # ── Row flash ─────────────────────────────────────────────────────────────
 
