@@ -1311,11 +1311,29 @@ class JiraOverlay:
         self.btn_snooze_icon.config(fg=_C["warn"] if snoozed else _C["fg_dim"])
 
         if has_new_alert and not snoozed:
-            msg = (f"New ticket: {next(iter(truly_new))}"
-                   if len(truly_new) == 1
-                   else f"{len(truly_new)} new tickets need attention")
+            # Build a lookup of key → summary from the already-fetched issues
+            summaries = {
+                (i.get("issueKey") or i.get("key", "")): (
+                    (i.get("fields") or {}).get("summary", "")
+                )
+                for i in self.new_issues
+            }
+            if len(truly_new) == 1:
+                key     = next(iter(truly_new))
+                summary = summaries.get(key, "")
+                title   = f"Jira — {key}"
+                body    = summary[:120] if summary else "New ticket in alert queue"
+            else:
+                title   = f"Jira — {len(truly_new)} new tickets"
+                lines   = []
+                for key in list(truly_new)[:3]:
+                    s = summaries.get(key, "")
+                    lines.append(f"{key}: {s[:60]}" if s else key)
+                if len(truly_new) > 3:
+                    lines.append(f"…and {len(truly_new) - 3} more")
+                body = "\n".join(lines)
             if self.config.get("notificationsEnabled", True):
-                send_toast("Jira — Newly Opened", msg)
+                send_toast(title, body)
             if self.config.get("soundEnabled", True):
                 play_alert()
 
