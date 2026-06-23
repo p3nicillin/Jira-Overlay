@@ -600,7 +600,8 @@ class JiraOverlay:
         self._anim_job: Optional[str] = None
         self._queue_geom: Optional[tuple[int, int, int, int]] = None
         self.loading           = False
-        self.error_msg: Optional[str] = None
+        self.error_msg: Optional[str] = None   # hard error requiring user action
+        self._conn_error: bool = False          # transient network error (keep last data)
         self._error_count      = 0
         self._prev_newly: Optional[int] = None
         self._seen_newly_ids: set[str]  = set()
@@ -1096,16 +1097,18 @@ class JiraOverlay:
             self._fetch_data()
         except requests.HTTPError as exc:
             self._error_count += 1
-            self.error_msg = f"HTTP {exc.response.status_code} — check credentials"
-            self.queues    = []
+            self.error_msg  = f"HTTP {exc.response.status_code} — check credentials"
+            self._conn_error = False
+            self.queues      = []
         except requests.ConnectionError:
+            # Transient — keep last known queue data; show subtle status only
             self._error_count += 1
-            self.error_msg = "Connection failed — retrying…"
-            self.queues    = []
+            self._conn_error   = True
         except Exception as exc:
             self._error_count += 1
-            self.error_msg = f"{type(exc).__name__}: {str(exc)[:40]}"
-            self.queues    = []
+            self.error_msg   = f"{type(exc).__name__}: {str(exc)[:40]}"
+            self._conn_error  = False
+            self.queues       = []
         finally:
             self.loading = False
             self.root.after(0, self._update_ui)
@@ -1190,6 +1193,7 @@ class JiraOverlay:
         self._fetch_completion_stats(cfg, auth)
 
         self.error_msg    = None
+        self._conn_error  = False
         self._error_count = 0
 
     def _fetch_completion_stats(self, cfg: dict, auth: HTTPBasicAuth) -> None:
@@ -1246,7 +1250,13 @@ class JiraOverlay:
     # ── Update UI ─────────────────────────────────────────────────────────────
 
     def _update_ui(self) -> None:
+        if self._conn_error:
+            # Transient network loss — keep existing rows, show subtle status
+            self.lbl_status.config(text="Reconnecting…", fg=_C["warn"])
+            return
+
         if self.error_msg:
+            # Hard error (auth failure, server error) — show prominently
             for rw in self.row_widgets.values():
                 rw["row"].destroy()
             self.row_widgets.clear()
@@ -1254,8 +1264,7 @@ class JiraOverlay:
                            font=("Segoe UI", 8), fg=_C["alert"], bg=_C["bg"])
             err.pack()
             self._bind_drag(err)
-            self.lbl_status.config(text="Fetch error — tap ↻ to retry",
-                                   fg=_C["alert"])
+            self.lbl_status.config(text="Tap ↻ to retry", fg=_C["alert"])
             self.root.after(10, self._resize)
             return
 
@@ -1370,7 +1379,7 @@ class JiraOverlay:
     # ── Relative time ──────────────────────────────────────────────────────────
 
     def _update_relative_time(self) -> None:
-        if self._last_refresh and not self.error_msg and not self._is_snoozed():
+        if self._last_refresh and not self.error_msg and not self._conn_error and not self._is_snoozed():
             secs = (datetime.now() - self._last_refresh).total_seconds()
             if secs < 60:
                 rel = "just now"
