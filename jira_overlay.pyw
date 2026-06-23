@@ -1101,9 +1101,8 @@ class JiraOverlay:
             self._conn_error = False
             self.queues      = []
         except requests.ConnectionError:
-            # Transient — keep last known queue data; show subtle status only
-            self._error_count += 1
-            self._conn_error   = True
+            # Transient — keep last known queue data, retry at normal rate (no backoff)
+            self._conn_error = True
         except Exception as exc:
             self._error_count += 1
             self.error_msg   = f"{type(exc).__name__}: {str(exc)[:40]}"
@@ -1112,13 +1111,15 @@ class JiraOverlay:
         finally:
             self.loading = False
             self.root.after(0, self._update_ui)
+            base = self.config.get("refreshSeconds", 30) * 1_000
             if self._settings_changed:
                 self._settings_changed = False
-                self._refresh_job = self.root.after(0, self._fetch)
+                delay = 0                                           # immediate
+            elif self._conn_error:
+                delay = base                                        # normal rate — no backoff
             else:
-                base  = self.config.get("refreshSeconds", 30) * 1_000
-                delay = min(base * (2 ** self._error_count), 5 * 60 * 1_000)
-                self._refresh_job = self.root.after(delay, self._fetch)
+                delay = min(base * (2 ** self._error_count), 5 * 60 * 1_000)  # backoff for hard errors only
+            self._refresh_job = self.root.after(delay, self._fetch)
 
     def _fetch_data(self) -> None:
         """Core data-fetch logic (called from worker thread)."""
