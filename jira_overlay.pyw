@@ -1100,8 +1100,8 @@ class JiraOverlay:
             self.error_msg  = f"HTTP {exc.response.status_code} — check credentials"
             self._conn_error = False
             self.queues      = []
-        except requests.ConnectionError:
-            # Transient — keep last known queue data, retry at normal rate (no backoff)
+        except (requests.ConnectionError, requests.Timeout):
+            # Transient (network drop, timeout) — keep last data, retry at normal rate
             self._conn_error = True
         except Exception as exc:
             self._error_count += 1
@@ -1257,9 +1257,9 @@ class JiraOverlay:
             return
 
         if self.error_msg:
-            # Hard error (auth failure, server error) — show prominently
-            for rw in self.row_widgets.values():
-                rw["row"].destroy()
+            # Hard error — wipe rows_frame completely then show single error label
+            for child in self.rows_frame.winfo_children():
+                child.destroy()
             self.row_widgets.clear()
             err = tk.Label(self.rows_frame, text=self.error_msg,
                            font=("Segoe UI", 8), fg=_C["alert"], bg=_C["bg"])
@@ -1268,6 +1268,12 @@ class JiraOverlay:
             self.lbl_status.config(text="Tap ↻ to retry", fg=_C["alert"])
             self.root.after(10, self._resize)
             return
+
+        # Remove any raw error labels left over from a previous hard-error state
+        tracked = {rw["row"] for rw in self.row_widgets.values()}
+        for child in self.rows_frame.winfo_children():
+            if child not in tracked:
+                child.destroy()
 
         # Sync row widgets with current queue list
         current_names = {q["name"] for q in self.queues}
